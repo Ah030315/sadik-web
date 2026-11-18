@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AC Telemetry — Next.js Style Dashboard</title>
+  
+  <!-- Google Fonts: Inter & Geist/JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            vercel: {
+              bg: '#000000',
+              card: '#0A0A0A',
+              hover: '#111111',
+              border: '#262626',
+              borderHover: '#404040',
+              muted: '#888888',
+              accent: '#0070F3',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #000000;
+      color: #EDEDED;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+    /* Custom subtle scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #000000;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #262626;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #404040;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-white selection:text-black">
+
+  <!-- Top Navigation Bar (Vercel / Next.js Style) -->
+  <header class="sticky top-0 z-50 border-b border-vercel-border bg-black/80 backdrop-blur-md">
+    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center gap-3">
+        <!-- Next.js style triangle/circle logo -->
+        <div class="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black font-bold">
+          <i data-lucide="snowflake" class="h-4 w-4"></i>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="font-semibold tracking-tight text-white">hvac-telemetry</span>
+          <span class="text-vercel-border">/</span>
+          <span class="rounded-full border border-vercel-border bg-vercel-card px-2.5 py-0.5 font-mono text-xs text-vercel-muted">
+            production
+          </span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <div class="hidden sm:flex items-center gap-2 rounded-full border border-vercel-border bg-vercel-card px-3 py-1 text-xs text-vercel-muted">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span class="font-mono">MQTT: Connected</span>
+        </div>
+        <button onclick="simulateSpike()" class="rounded-md border border-vercel-border bg-white px-3 py-1.5 text-xs font-medium text-black transition hover:bg-neutral-200">
+          Simulasi Beban
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Sub-navigation Tabs -->
+  <div class="border-b border-vercel-border bg-black">
+    <div class="mx-auto flex max-w-7xl gap-6 px-4 sm:px-6 lg:px-8 text-sm">
+      <a href="#" class="border-b-2 border-white py-3 font-medium text-white">Overview</a>
+      <a href="#" class="border-b-2 border-transparent py-3 text-vercel-muted hover:text-white transition">Unit Nodes</a>
+      <a href="#" class="border-b-2 border-transparent py-3 text-vercel-muted hover:text-white transition">Energy Logs</a>
+      <a href="#" class="border-b-2 border-transparent py-3 text-vercel-muted hover:text-white transition">Settings</a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    
+    <!-- Header Title -->
+    <div class="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      <div>
+        <h1 class="text-2xl font-semibold tracking-tight text-white">AC System Monitoring</h1>
+        <p class="mt-1 text-sm text-vercel-muted">Real-time telemetry suhu ruangan, arus kompresor, dan status unit.</p>
+      </div>
+      <div class="flex items-center gap-2 font-mono text-xs text-vercel-muted">
+        <span>Last sync:</span>
+        <span id="last-sync" class="text-white">--:--:--</span>
+      </div>
+    </div>
+
+    <!-- KPI Cards Grid -->
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+      <!-- Card 1 -->
+      <div class="rounded-lg border border-vercel-border bg-vercel-card p-5 transition hover:border-vercel-borderHover">
+        <div class="flex items-center justify-between text-vercel-muted">
+          <span class="text-xs font-medium uppercase tracking-wider">Avg Room Temp</span>
+          <i data-lucide="thermometer" class="h-4 w-4"></i>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="avg-temp" class="font-mono text-3xl font-semibold tracking-tight text-white">21.4°C</span>
+          <span class="font-mono text-xs text-emerald-400">-0.3°C</span>
+        </div>
+        <p class="mt-2 text-xs text-vercel-muted">Target setpoint: 21.0°C</p>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="rounded-lg border border-vercel-border bg-vercel-card p-5 transition hover:border-vercel-borderHover">
+        <div class="flex items-center justify-between text-vercel-muted">
+          <span class="text-xs font-medium uppercase tracking-wider">Total Power Draw</span>
+          <i data-lucide="zap" class="h-4 w-4"></i>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="total-power" class="font-mono text-3xl font-semibold tracking-tight text-white">3.42 kW</span>
+          <span class="font-mono text-xs text-vercel-muted">~15.5 A</span>
+        </div>
+        <p class="mt-2 text-xs text-vercel-muted">Est. biaya: Rp 4.940 / jam</p>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="rounded-lg border border-vercel-border bg-vercel-card p-5 transition hover:border-vercel-borderHover">
+        <div class="flex items-center justify-between text-vercel-muted">
+          <span class="text-xs font-medium uppercase tracking-wider">Humidity (RH)</span>
+          <i data-lucide="droplets" class="h-4 w-4"></i>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="avg-humidity" class="font-mono text-3xl font-semibold tracking-tight text-white">54%</span>
+          <span class="font-mono text-xs text-emerald-400">Optimal</span>
+        </div>
+        <p class="mt-2 text-xs text-vercel-muted">Range ideal: 45% - 60%</p>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="rounded-lg border border-vercel-border bg-vercel-card p-5 transition hover:border-vercel-borderHover">
+        <div class="flex items-center justify-between text-vercel-muted">
+          <span class="text-xs font-medium uppercase tracking-wider">Active Units</span>
+          <i data-lucide="server" class="h-4 w-4"></i>
+        </div>
+        <div class="mt-3 flex items-baseline gap-2">
+          <span id="active-units-count" class="font-mono text-3xl font-semibold tracking-tight text-white">3 / 4</span>
+          <span class="font-mono text-xs text-blue-400">Online</span>
+        </div>
+        <p class="mt-2 text-xs text-vercel-muted">1 unit mode Standby</p>
+      </div>
+    </div>
+
+    <!-- Chart Section -->
+    <div class="mb-8 rounded-lg border border-vercel-border bg-vercel-card p-6">
+      <div class="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+        <div>
+          <h2 class="text-base font-medium text-white">Power & Temperature Telemetry</h2>
+          <p class="text-xs text-vercel-muted">Pemantauan daya listrik (Watt) dan rata-rata suhu ruangan secara real-time</p>
+        </div>
+        <div class="flex items-center gap-4 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="h-2.5 w-2.5 rounded-full bg-white"></span>
+            <span class="text-vercel-muted">Daya (W)</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="h-2.5 w-2.5 rounded-full bg-blue-500"></span>
+            <span class="text-vercel-muted">Suhu (°C)</span>
+          </div>
+        </div>
+      </div>
+      <div class="h-64 w-full">
+        <canvas id="telemetryChart"></canvas>
+      </div>
+    </div>
+
+    <!-- AC Units Control & Status Grid -->
+    <div class="mb-4 flex items-center justify-between">
+      <h2 class="text-base font-medium text-white">AC Units (Nodes)</h2>
+      <span class="font-mono text-xs text-vercel-muted">4 Devices Registered</span>
+    </div>
+
+    <div id="ac-grid" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <!-- Cards will be injected by JavaScript -->
+    </div>
+
+  </main>
+
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // Data Mockup Unit AC
+    const acUnits = [
+      {
+        id: 'ac-01',
+        name: 'Server Room - Main',
+        model: 'Daikin Inverter 2 PK',
+        status: true,
+        mode: 'COOL',
+        currentTemp: 19.2,
+        targetTemp: 19,
+        power: 1240,
+        fanSpeed: 'HIGH'
+      },
+      {
+        id: 'ac-02',
+        name: 'Workspace Area A',
+        model: 'LG DualCool 1.5 PK',
+        status: true,
+        mode: 'COOL',
+        currentTemp: 22.1,
+        targetTemp: 22,
+        power: 980,
+        fanSpeed: 'AUTO'
+      },
+      {
+        id: 'ac-03',
+        name: 'Meeting Room 01',
+        model: 'Panasonic Nanoe-X 1.5 PK',
+        status: true,
+        mode: 'ECO',
+        currentTemp: 22.9,
+        targetTemp: 23,
+        power: 1200,
+        fanSpeed: 'MED'
+      },
+      {
+        id: 'ac-04',
+        name: 'Executive Lounge',
+        model: 'Mitsubishi Heavy 2 PK',
+        status: false,
+        mode: 'OFF',
+        currentTemp: 26.5,
+        targetTemp: 22,
+        power: 0,
+        fanSpeed: 'LOW'
+      }
+    ];
+
+    // Render AC Cards
+    function renderACUnits() {
+      const grid = document.getElementById('ac-grid');
+      grid.innerHTML = '';
+
+      let activeCount = 0;
+      let totalPower = 0;
+      let totalTemp = 0;
+
+      acUnits.forEach((unit, index) => {
+        if (unit.status) {
+          activeCount++;
+          totalPower += unit.power;
+          totalTemp += unit.currentTemp;
+        }
+
+        const card = document.createElement('div');
+        card.className = `rounded-lg border ${unit.status ? 'border-vercel-border bg-vercel-card' : 'border-neutral-900 bg-neutral-950/60'} p-5 transition hover:border-vercel-borderHover`;
+        
+        card.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="flex items-center gap-2.5">
+                <span class="h-2 w-2 rounded-full ${unit.status ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-neutral-600'}"></span>
+                <h3 class="font-medium text-white">${unit.name}</h3>
+              </div>
+              <p class="mt-0.5 font-mono text-xs text-vercel-muted">${unit.id} • ${unit.model}</p>
+            </div>
+
+            <!-- Toggle Switch Vercel Style -->
+            <button onclick="togglePower(${index})" class="relative inline-flex h-6 w-11 items-center rounded-full border border-vercel-border transition-colors ${unit.status ? 'bg-white' : 'bg-neutral-900'}">
+              <span class="inline-block h-4 w-4 transform rounded-full transition-transform ${unit.status ? 'translate-x-6 bg-black' : 'translate-x-1 bg-neutral-500'}"></span>
+            </button>
+          </div>
+
+          <div class="mt-6 grid grid-cols-3 gap-4 border-y border-vercel-border py-4">
+            <div>
+              <span class="text-xs text-vercel-muted">Room Temp</span>
+              <p class="mt-1 font-mono text-lg font-semibold text-white">${unit.currentTemp.toFixed(1)}°C</p>
+            </div>
+            <div>
+              <span class="text-xs text-vercel-muted">Setpoint</span>
+              <div class="mt-1 flex items-center gap-2">
+                <button onclick="changeTemp(${index}, -1)" ${!unit.status ? 'disabled' : ''} class="flex h-6 w-6 items-center justify-center rounded border border-vercel-border bg-black text-xs text-white hover:bg-neutral-800 disabled:opacity-30">-</button>
+                <span class="font-mono text-lg font-semibold text-white">${unit.targetTemp}°</span>
+                <button onclick="changeTemp(${index}, 1)" ${!unit.status ? 'disabled' : ''} class="flex h-6 w-6 items-center justify-center rounded border border-vercel-border bg-black text-xs text-white hover:bg-neutral-800 disabled:opacity-30">+</button>
+              </div>
+            </div>
+            <div>
+              <span class="text-xs text-vercel-muted">Power</span>
+              <p class="mt-1 font-mono text-lg font-semibold ${unit.status ? 'text-white' : 'text-vercel-muted'}">${unit.power} W</p>
+            </div>
+          </div>
+
+          <div class="mt-4 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="rounded border border-vercel-border bg-black px-2 py-0.5 font-mono text-vercel-muted">MODE: <strong class="text-white">${unit.status ? unit.mode : 'STANDBY'}</strong></span>
+              <span class="rounded border border-vercel-border bg-black px-2 py-0.5 font-mono text-vercel-muted">FAN: <strong class="text-white">${unit.status ? unit.fanSpeed : '-'}</strong></span>
+            </div>
+            <span class="font-mono text-vercel-muted">${unit.status ? 'Compressor: ON' : 'Idle'}</span>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      // Update Global KPI
+      document.getElementById('active-units-count').innerText = `${activeCount} / ${acUnits.length}`;
+      document.getElementById('total-power').innerText = `${(totalPower / 1000).toFixed(2)} kW`;
+      const avgT = activeCount > 0 ? (totalTemp / activeCount).toFixed(1) : '--';
+      document.getElementById('avg-temp').innerText = `${avgT}°C`;
+    }
+
+    // Interactive Controls
+    function togglePower(index) {
+      acUnits[index].status = !acUnits[index].status;
+      if (acUnits[index].status) {
+        acUnits[index].mode = 'COOL';
+        acUnits[index].power = Math.floor(Math.random() * (1250 - 850 + 1)) + 850;
+      } else {
+        acUnits[index].mode = 'OFF';
+        acUnits[index].power = 0;
+      }
+      renderACUnits();
+    }
+
+    function changeTemp(index, delta) {
+      if (!acUnits[index].status) return;
+      const newTemp = acUnits[index].targetTemp + delta;
+      if (newTemp >= 16 && newTemp <= 30) {
+        acUnits[index].targetTemp = newTemp;
+        // Adjust power slightly based on target temp
+        acUnits[index].power = Math.max(400, acUnits[index].power - (delta * 85));
+        renderACUnits();
+      }
+    }
+
+    // Setup Chart.js (Vercel / Next.js Minimalist Style)
+    const ctx = document.getElementById('telemetryChart').getContext('2d');
+    const initialLabels = ['18:20', '18:21', '18:22', '18:23', '18:24', '18:25', '18:26', '18:27', '18:28', '18:29'];
+    const powerData = [3100, 3250, 3400, 3380, 3420, 3390, 3450, 3410, 3400, 3420];
+    const tempData = [22.1, 22.0, 21.8, 21.7, 21.6, 21.5, 21.5, 21.4, 21.4, 21.4];
+
+    const telemetryChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: initialLabels,
+        datasets: [
+          {
+            label: 'Daya (W)',
+            data: powerData,
+            borderColor: '#FFFFFF',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            borderWidth: 1.5,
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            fill: true,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Suhu (°C)',
+            data: tempData,
+            borderColor: '#0070F3',
+            borderWidth: 1.5,
+            borderDash: [4, 4],
+            tension: 0.3,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            yAxisID: 'y1',
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0A0A0A',
+            titleColor: '#888888',
+            bodyColor: '#FFFFFF',
+            borderColor: '#262626',
+            borderWidth: 1,
+            padding: 10,
+            titleFont: { family: 'JetBrains Mono', size: 11 },
+            bodyFont: { family: 'JetBrains Mono', size: 12 }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: '#171717', drawBorder: false },
+            ticks: { color: '#666666', font: { family: 'JetBrains Mono', size: 11 } }
+          },
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            grid: { color: '#171717', drawBorder: false },
+            ticks: { color: '#666666', font: { family: 'JetBrains Mono', size: 11 } }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            min: 16,
+            max: 28,
+            grid: { drawOnChartArea: false },
+            ticks: { color: '#0070F3', font: { family: 'JetBrains Mono', size: 11 } }
+          }
+        }
+      }
+    });
+
+    // Real-time Telemetry Simulation
+    function updateTelemetry() {
+      const now = new Date();
+      const timeStr = now.toTimeString().split(' ')[0];
+      document.getElementById('last-sync').innerText = timeStr;
+
+      // Fluktuasi kecil suhu dan daya
+      let currentTotalPower = 0;
+      let activeTempSum = 0;
+      let activeCount = 0;
+
+      acUnits.forEach(unit => {
+        if (unit.status) {
+          const fluktuasiDaya = Math.floor(Math.random() * 30) - 15;
+          unit.power = Math.max(300, unit.power + fluktuasiDaya);
+          
+          // Mendekati targetTemp perlahan
+          if (unit.currentTemp > unit.targetTemp) {
+            unit.currentTemp -= 0.1;
+          } else if (unit.currentTemp < unit.targetTemp) {
+            unit.currentTemp += 0.1;
+          }
+
+          currentTotalPower += unit.power;
+          activeTempSum += unit.currentTemp;
+          activeCount++;
+        }
+      });
+
+      const avgTemp = activeCount > 0 ? +(activeTempSum / activeCount).toFixed(1) : 25.0;
+
+      // Update Chart
+      telemetryChart.data.labels.push(timeStr.slice(0, 5));
+      telemetryChart.data.datasets[0].data.push(currentTotalPower);
+      telemetryChart.data.datasets[1].data.push(avgTemp);
+
+      if (telemetryChart.data.labels.length > 15) {
+        telemetryChart.data.labels.shift();
+        telemetryChart.data.datasets[0].data.shift();
+        telemetryChart.data.datasets[1].data.shift();
+      }
+      telemetryChart.update('none');
+      renderACUnits();
+    }
+
+    function simulateSpike() {
+      acUnits.forEach(u => {
+        if (u.status) u.power += 450;
+      });
+      updateTelemetry();
+    }
+
+    // Initial render & interval 3 detik
+    renderACUnits();
+    document.getElementById('last-sync').innerText = new Date().toTimeString().split(' ')[0];
+    setInterval(updateTelemetry, 3000);
+  </script>
+</body>
+</html>
